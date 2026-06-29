@@ -1,0 +1,35 @@
+name: 自动解压ZIP文件
+
+on:
+push:
+branches: [ main ]
+
+jobs:
+auto-unzip:
+runs-on: ubuntu-latest
+steps:
+# 拉取仓库里的所有文件（包含你上传的zip）
+- name: 检出代码
+uses: actions/checkout@v4
+
+# 解压你上传的zip
+- name: 解压项目压缩包
+run: |
+echo "开始解压dlt_android_studio_project.zip..."
+# 创建同名文件夹存放解压内容
+foldername="dlt_android_studio_project"
+mkdir -p "$foldername"
+# 解压zip到目标文件夹
+unzip -o dlt_android_studio_project.zip -d "$foldername/"
+echo "解压完成，输出文件："
+ls -la "$foldername/"
+
+# 把解压后的文件自动提交回你的GitHub仓库
+- name: 提交解压后的文件到仓库
+run: |
+git config --local user.email "action@github.com"
+git config --local user.name "Auto Unzip"
+git add .
+# 如果没有文件变化就不提交，避免失败
+git commit -m "自动解压dlt_android_studio_project.zip [skip ci]" || exit 0
+git push
