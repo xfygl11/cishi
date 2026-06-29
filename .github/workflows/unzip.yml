@@ -1,0 +1,25 @@
+name: 自动解压ZIP
+on:
+  push:
+    branches: [ main ]
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取仓库文件
+        uses: actions/checkout@v4
+      - name: 解压dlt_android_studio_project.zip
+        run: |
+          ZIP_NAME="dlt_android_studio_project.zip"
+          OUT_DIR="${ZIP_NAME%.zip}"
+          mkdir -p $OUT_DIR
+          unzip -o $ZIP_NAME -d $OUT_DIR/
+          echo "解压完成，文件列表："
+          ls -la $OUT_DIR
+      - name: 提交解压结果回仓库
+        run: |
+          git config --local user.email "auto@github.com"
+          git config --local user.name "Auto Unzip"
+          git add .
+          git commit -m "云自动解压dlt_android_studio_project.zip [skip ci]" || exit 0
+          git push
