@@ -1,0 +1,86 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master, 'trae/*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  APP_NAME: 饭太硬TV
+  VERSION_NAME: "10.0"
+  VERSION_CODE: 75
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android Build Tools
+        run: |
+          sdkmanager "platforms;android-33" "build-tools;33.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+
+      - name: Build APK
+        run: |
+          cd cishi/app-build
+          chmod +x build.sh
+          export ANDROID_JAR=$ANDROID_HOME/platforms/android-33/android.jar
+          export BUILD_TOOLS=$ANDROID_HOME/build-tools/33.0.0
+          export AAPT2=$BUILD_TOOLS/aapt2
+          export D8=$BUILD_TOOLS/d8
+          export ZIPALIGN=$BUILD_TOOLS/zipalign
+          export APKSIGNER=$BUILD_TOOLS/apksigner
+          export JAVA_HOME=$JAVA_HOME_17_X64
+          bash build.sh
+
+      - name: Find APK
+        id: find_apk
+        run: |
+          APK_PATH=$(find cishi/app-build/build -name "*.apk" -type f | head -1)
+          echo "APK_PATH=$APK_PATH" >> $GITHUB_ENV
+          echo "APK_NAME=$(basename $APK_PATH)" >> $GITHUB_ENV
+          echo "Found APK: $APK_PATH"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: ${{ env.APK_PATH }}
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v10.0-build${{ github.run_number }}
+          name: 饭太硬TV v10.0 Build ${{ github.run_number }}
+          body: |
+            ## 饭太硬TV v10.0
+            
+            ### 功能特性
+            - **NativeHttp原生网络桥接**（替代proxy-server.py）
+            - **饭太硬仓库配置加载**（Base64解码+IDN域名处理）
+            - **原生播放器**（VideoView + MediaPlayer，支持全屏、倍速）
+            - **直播功能支持**（m3u/txt/cms多格式）
+            - **WebView混合架构**（保留原有Web界面，原生增强）
+            
+            ### 构建信息
+            - 版本: v10.0 build${{ github.run_number }}
+            - 构建时间: ${{ github.event.head_commit.timestamp || '手动触发' }}
+            - 提交: ${{ github.sha }}
+          files: ${{ env.APK_PATH }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
