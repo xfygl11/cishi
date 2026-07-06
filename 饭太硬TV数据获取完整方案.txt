@@ -1,0 +1,813 @@
+================================================================================
+                    饭太硬 TV 完整数据获取方案（含代码）
+================================================================================
+
+目录
+--------------------------------------------------------------------------------
+1. 数据获取全流程代码
+2. 站点配置解析
+3. 示例：从配置到获取影片链接
+4. TVBox API 调用规范
+5. 数据处理代码
+6. 完整可运行脚本
+
+
+================================================================================
+第一部分：数据获取全流程代码
+================================================================================
+
+1.1 下载并解码配置数据
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+饭太硬 TV 数据抓取 - 完整流程
+"""
+
+import subprocess
+import base64
+import zlib
+import json
+import re
+import os
+
+# 第1步: 使用 curl 下载原始数据
+def download_config(url="http://www.饭太硬.net/tv"):
+    """下载配置数据"""
+    result = subprocess.run(
+        ['curl', '-s', '--max-time', '30', '-o', '/tmp/tv_data.bin', url],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0 or not os.path.exists('/tmp/tv_data.bin'):
+        raise Exception(f"下载失败: {result.stderr}")
+    
+    file_size = os.path.getsize('/tmp/tv_data.bin')
+    print(f"[OK] 下载成功，文件大小: {file_size} 字节")
+    return '/tmp/tv_data.bin'
+
+# 第2步: Base64 解码
+def decode_base64(filepath):
+    """解码 Base64 数据"""
+    with open(filepath, 'rb') as f:
+        data = f.read()
+    
+    text = data.decode('utf-8', errors='ignore')
+    
+    # 正则匹配 Base64 字符串
+    b64_pattern = r'([A-Za-z0-9+/]{200,}={0,2})'
+    matches = re.findall(b64_pattern, text)
+    
+    for match in matches:
+        try:
+            decoded = base64.b64decode(match)
+            content = decoded.decode('utf-8', errors='ignore')
+            if '"sites"' in content:
+                print(f"[OK] Base64 解码成功")
+                return content
+        except Exception as e:
+            continue
+    
+    raise Exception("未找到有效的 JSON 数据")
+
+# 第3步: zlib 解压缩（如果数据被压缩）
+def decompress_if_needed(data):
+    """如果数据被 zlib 压缩则解压"""
+    try:
+        decompressed = zlib.decompress(data)
+        print(f"[OK] zlib 解压缩成功")
+        return decompressed.decode('utf-8')
+    except:
+        return data
+
+# 第4步: 解析 JSON
+def parse_json(content):
+    """解析 JSON 配置"""
+    try:
+        config = json.loads(content)
+        print(f"[OK] JSON 解析成功")
+        return config
+    except json.JSONDecodeError as e:
+        print(f"[WARN] JSON 解析失败: {e}")
+        print(f"     尝试手动解析...")
+        return manual_parse(content)
+
+def manual_parse(content):
+    """手动解析 JSON（处理格式问题）"""
+    # 移除注释行
+    lines = content.split('\n')
+    clean_lines = [l for l in lines if not l.strip().startswith('//')]
+    content = '\n'.join(clean_lines)
+    
+    # 提取 sites 数组
+    sites_match = re.search(r'"sites":\[(.*?)\]', content, re.DOTALL)
+    if sites_match:
+        sites_str = '[' + sites_match.group(1) + ']'
+        # 逐行解析每个站点
+        sites = []
+        current = ''
+        for line in sites_str.split('\n'):
+            line = line.strip().rstrip(',')
+            if line.startswith('{') and line.endswith('}'):
+                try:
+                    sites.append(json.loads(line))
+                except:
+                    pass
+            elif line.startswith('{'):
+                current = line
+            elif current:
+                current += ' ' + line
+                if '}' in current:
+                    try:
+                        sites.append(json.loads(current))
+                    except:
+                        pass
+                    current = ''
+        
+        print(f"[OK] 手动解析成功，找到 {len(sites)} 个站点")
+        return {'sites': sites}
+    
+    return {}
+
+# 主流程
+def main():
+    print("=" * 70)
+    print("  饭太硬 TV 数据抓取 - 完整流程")
+    print("=" * 70)
+    
+    # 1. 下载
+    filepath = download_config()
+    
+    # 2. 解码
+    content = decode_base64(filepath)
+    
+    # 3. 解析
+    config = parse_json(content)
+    
+    # 4. 输出
+    if 'sites' in config:
+        print(f"\n[INFO] 共找到 {len(config['sites'])} 个站点")
+        for i, site in enumerate(config['sites'][:5]):
+            print(f"  [{i+1}] {site.get('name', '未知')}")
+    
+    print("\n" + "=" * 70)
+    print("  流程完成！")
+    print("=" * 70)
+
+if __name__ == '__main__':
+    main()
+
+
+================================================================================
+第二部分：站点配置解析
+================================================================================
+
+2.1 解析站点配置
+
+def parse_sites_config(content):
+    """解析站点配置"""
+    # 移除注释
+    lines = content.split('\n')
+    clean_lines = [l for l in lines if not l.strip().startswith('//')]
+    content = '\n'.join(clean_lines)
+    
+    sites = []
+    current_site = ''
+    in_sites = False
+    
+    for line in content.split('\n'):
+        stripped = line.strip().rstrip(',')
+        
+        if '"sites":[' in line:
+            in_sites = True
+            after = line.split('[', 1)[1]
+            if '{' in after:
+                si = after.index('{')
+                rem = after[si:]
+                if '}' in rem:
+                    ei = rem.index('}') + 1
+                    obj = rem[:ei].rstrip(',')
+                    if obj: sites.append(obj)
+                    rest = rem[ei:].strip().rstrip(',')
+                    if rest and rest != ',' and rest.startswith('{'):
+                        sites.append(rest)
+            continue
+        
+        if in_sites:
+            if ']' in line:
+                before = line.split(']', 1)[0]
+                bstripped = before.strip().rstrip(',')
+                if bstripped.startswith('{'):
+                    sites.append(bsstripped)
+                in_sites = False
+                continue
+            
+            if stripped.startswith('{') and stripped.endswith('}'):
+                sites.append(stripped)
+            elif stripped.startswith('{'):
+                current_site = stripped.rstrip(',')
+            elif current_site:
+                current_site = current_site.rstrip(',') + ' ' + stripped.rstrip(',')
+                if '}' in current_site:
+                    sites.append(current_site)
+                    current_site = ''
+    
+    # 解析 JSON
+    parsed_sites = []
+    for s in sites:
+        try:
+            parsed_sites.append(json.loads(s))
+        except json.JSONDecodeError:
+            pass
+    
+    return parsed_sites
+
+2.2 查找特定站点
+
+def find_site(sites, keyword):
+    """根据关键词查找站点"""
+    results = []
+    for site in sites:
+        name = site.get('name', '')
+        key = site.get('key', '')
+        if keyword in name or keyword in key:
+            results.append(site)
+    return results
+
+# 示例: 查找玩偶哥哥
+sites = parse_sites_config(content)
+wanou_sites = find_site(sites, '玩偶')
+for site in wanou_sites:
+    print(json.dumps(site, ensure_ascii=False, indent=2))
+
+
+================================================================================
+第三部分：示例 - 从配置到获取影片链接
+================================================================================
+
+3.1 完整流程示例（以"厂长影视"为例）
+
+"""
+流程说明:
+
+第1步: 从饭太硬网站获取配置
+  命令: curl -s http://www.饭太硬.net/tv
+  
+  响应: Base64 编码的二进制数据（包裹在 JPEG 中）
+
+第2步: 解码配置
+  方法: Base64 解码 + zlib 解压缩
+  
+  结果: JSON 格式的站点配置
+
+第3步: 解析配置，找到"厂长"站点
+  配置内容:
+  {
+    "key": "厂长",
+    "name": "📔厂长┃不卡",
+    "type": 3,
+    "api": "csp_NewCzGuard",
+    "timeout": 10,
+    "playerType": 2,
+    "searchable": 1,
+    "quickSearch": 1,
+    "changeable": 1
+  }
+
+第4步: 加载 Spider 插件
+  - 从配置中的 spider URL 下载 spider.jar
+  - spider URL: https://zl.wpscdn.cn/.../space_img/...jpg
+  - 解压得到 classes.dex (Android DEX 文件)
+  - 在 TVBox 应用中加载
+
+第5步: 初始化站点
+  - TVBox 根据 api 字段 "csp_NewCzGuard" 找到对应类
+  - 调用类的 init() 方法初始化
+  - 设置超时时间为 10 秒
+
+第6步: 获取首页分类
+  - 调用 homeContent() 方法
+  - 返回分类列表:
+    {
+      "class": [
+        {"type_id": "1", "type_name": "电影"},
+        {"type_id": "2", "type_name": "电视剧"},
+        {"type_id": "3", "type_name": "动漫"},
+        {"type_id": "4", "type_name": "综艺"},
+        ...
+      ]
+    }
+
+第7步: 获取分类下的视频列表
+  - 调用 categoryContent(type_id="1", page="1")
+  - 返回视频列表:
+    {
+      "list": [
+        {
+          "vod_id": "12345",
+          "vod_name": "流浪地球3",
+          "vod_pic": "https://example.com/poster.jpg",
+          "vod_remarks": "HD",
+          "type_name": "电影"
+        },
+        ...
+      ]
+    }
+
+第8步: 获取视频详情
+  - 调用 detailContent(vod_id="12345")
+  - 返回视频详情:
+    {
+      "list": [
+        {
+          "vod_id": "12345",
+          "vod_name": "流浪地球3",
+          "vod_actor": "吴京,屈楚萧...",
+          "vod_director": "郭帆",
+          "vod_blurb": "太阳即将毁灭...",
+          "vod_play_from": "极速网盘###备用网盘",
+          "vod_play_url": "第01集$https://example.com/ep1.m3u8#第02集$https://example.com/ep2.m3u8"
+        }
+      ]
+    }
+
+第9步: 解析播放链接
+  - 从 vod_play_url 提取播放地址
+  - 格式: 集数$播放地址#集数$播放地址
+  - 返回最终播放链接: https://example.com/ep1.m3u8
+
+第10步: 播放视频
+  - 使用播放器打开 m3u8 链接
+  - TVBox 内部调用 playContent(play_url)
+  - 返回可直接播放的 URL
+"""
+
+3.2 实际代码实现
+
+# 步骤1: 获取配置
+config_content = decode_base64('/tmp/tv_data.bin')
+
+# 步骤2: 解析站点
+sites = parse_sites_config(config_content)
+
+# 步骤3: 找到厂长站点
+changzhang = find_site(sites, '厂长')[0]
+print(f"找到站点: {changzhang['name']}")
+print(f"API: {changzhang['api']}")
+print(f"搜索: {'支持' if changzhang.get('searchable') else '不支持'}")
+
+# 步骤4: 在 TVBox 中，接下来会:
+# - 加载 csp_NewCzGuard 类
+# - 调用 homeContent() 获取分类
+# - 调用 categoryContent() 获取视频列表
+# - 调用 detailContent() 获取详情
+# - 调用 playContent() 获取播放链接
+
+# 注意: 实际的 API 调用需要通过 TVBox 应用执行
+# 这里只能展示配置解析部分
+
+
+================================================================================
+第四部分：TVBox API 调用规范
+================================================================================
+
+4.1 TVBox 站点 API 标准
+
+TVBox 的爬虫插件遵循统一的接口规范:
+
+class BaseSpider:
+    def init(self, extend=""):
+        """初始化站点"""
+        pass
+    
+    def homeContent(self, filter=False):
+        """获取首页分类和推荐"""
+        return {
+            "class": [{"type_id": "1", "type_name": "电影"}],
+            "filters": {...}
+        }
+    
+    def homeVideoContent(self):
+        """获取首页推荐视频"""
+        return {
+            "list": [
+                {
+                    "vod_id": "123",
+                    "vod_name": "示例电影",
+                    "vod_pic": "https://...",
+                    "vod_remarks": "HD"
+                }
+            ]
+        }
+    
+    def categoryContent(self, tid, pg="1", filter=True, extend={}):
+        """获取分类视频列表"""
+        return {
+            "list": [...],
+            "total": 100,
+            "page": 1,
+            "pagecount": 10
+        }
+    
+    def detailContent(self, ids):
+        """获取视频详情"""
+        return {
+            "list": [{
+                "vod_id": "123",
+                "vod_name": "示例电影",
+                "vod_play_from": "网盘###本地",
+                "vod_play_url": "第1集$https://...#第2集$https://..."
+            }]
+        }
+    
+    def searchContent(self, key, quick=False, pg="1"):
+        """搜索视频"""
+        return {
+            "list": [...]
+        }
+    
+    def playerContent(self, flag, id, vipFlags=None):
+        """获取播放链接"""
+        return {
+            "url": "https://...",
+            "header": {"User-Agent": "..."}
+        }
+
+4.2 数据格式说明
+
+视频对象 (vod):
+{
+  "vod_id": "123",           # 视频唯一ID
+  "vod_name": "电影名称",     # 视频名称
+  "vod_pic": "https://...",  # 封面图片URL
+  "vod_remarks": "HD",       # 备注（清晰度）
+  "vod_year": "2024",        # 年份
+  "vod_area": "中国大陆",     # 地区
+  "vod_actor": "演员1,演员2", # 演员
+  "vod_director": "导演",     # 导演
+  "vod_des": "简介...",      # 描述
+  "vod_play_from": "来源1###来源2",  # 播放来源（分隔符）
+  "vod_play_url": "第1集$URL1#第2集$URL2"  # 播放地址
+}
+
+分类对象 (type):
+{
+  "type_id": "1",      # 分类ID
+  "type_name": "电影"   # 分类名称
+}
+
+
+================================================================================
+第五部分：数据处理代码
+================================================================================
+
+5.1 站点分类统计
+
+def categorize_sites(sites):
+    """按内容类型对站点进行分类"""
+    categories = {
+        '影视点播': [],
+        '动漫': [],
+        '直播/体育': [],
+        '网盘/搜索': [],
+        '教育/其他': []
+    }
+    
+    for site in sites:
+        name = site.get('name', '')
+        
+        if any(k in name for k in ['不卡', '秒播', '多线', '磁力']):
+            categories['影视点播'].append(site)
+        elif any(k in name for k in ['动漫', '巴士', '日本', '咕咕']):
+            categories['动漫'].append(site)
+        elif any(k in name for k in ['看球', '直播', 'MV', '虎牙', '斗鱼']):
+            categories['直播/体育'].append(site)
+        elif any(k in name for k in ['搜', '盘', '聚剧', '聚盘', '云盘']):
+            categories['网盘/搜索'].append(site)
+        else:
+            categories['教育/其他'].append(site)
+    
+    return categories
+
+5.2 搜索能力统计
+
+def search_capability(sites):
+    """统计站点的搜索能力"""
+    stats = {
+        'fast_and_normal': [],  # 快速+普通
+        'normal_only': [],       # 仅普通
+        'none': []               # 不可搜索
+    }
+    
+    for site in sites:
+        searchable = site.get('searchable', 0)
+        quick_search = site.get('quickSearch', 0)
+        
+        if searchable and quick_search:
+            stats['fast_and_normal'].append(site)
+        elif searchable:
+            stats['normal_only'].append(site)
+        else:
+            stats['none'].append(site)
+    
+    return stats
+
+5.3 提取云盘配置站点
+
+def get_cloud_drive_sites(sites):
+    """获取需要云盘配置的站点"""
+    cloud_sites = []
+    for site in sites:
+        ext = site.get('ext', {})
+        if isinstance(ext, dict) and 'Cloud-drive' in ext:
+            cloud_sites.append({
+                'name': site['name'],
+                'key': site['key'],
+                'cloud_drive': ext['Cloud-drive']
+            })
+    return cloud_sites
+
+5.4 提取外部 URL 依赖
+
+def extract_external_urls(sites):
+    """提取站点的外部 URL 依赖"""
+    urls = {
+        'siteUrls': [],
+        'jsonConfigs': [],
+        'jsScripts': []
+    }
+    
+    for site in sites:
+        ext = site.get('ext', '')
+        api = site.get('api', '')
+        
+        # 检查 siteUrl
+        if isinstance(ext, dict) and 'siteUrl' in ext:
+            urls['siteUrls'].append({
+                'name': site['name'],
+                'url': ext['siteUrl']
+            })
+        
+        # 检查 json 配置
+        if isinstance(ext, dict) and 'json' in ext:
+            urls['jsonConfigs'].append({
+                'name': site['name'],
+                'url': ext['json']
+            })
+        
+        # 检查 js 脚本
+        if 'drpy2.min.js' in api:
+            urls['jsScripts'].append({
+                'name': site['name'],
+                'api': api,
+                'ext': ext if isinstance(ext, str) else ''
+            })
+    
+    return urls
+
+
+================================================================================
+第六部分：完整可运行脚本
+================================================================================
+
+6.1 主脚本 (tv_scrape.py)
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+饭太硬 TV 数据抓取 - 完整可运行脚本
+
+用法:
+    python3 tv_scrape.py                    # 抓取并显示所有站点
+    python3 tv_scrape.py --json             # 输出 JSON 格式
+    python3 tv_scrape.py --site 厂长         # 只显示指定站点
+    python3 tv_scrape.py --wanou            # 只显示玩偶哥哥
+"""
+
+import subprocess
+import base64
+import json
+import re
+import sys
+import os
+import argparse
+
+def download_config(url="http://www.饭太硬.net/tv"):
+    """下载配置数据"""
+    result = subprocess.run(
+        ['curl', '-s', '--max-time', '30', '-o', '/tmp/tv_data.bin', url],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0 or not os.path.exists('/tmp/tv_data.bin'):
+        raise Exception(f"下载失败: {result.stderr}")
+    return '/tmp/tv_data.bin'
+
+def decode_config(filepath):
+    """解码配置数据"""
+    with open(filepath, 'rb') as f:
+        data = f.read()
+    
+    text = data.decode('utf-8', errors='ignore')
+    b64_pattern = r'([A-Za-z0-9+/]{200,}={0,2})'
+    matches = re.findall(b64_pattern, text)
+    
+    for match in matches:
+        try:
+            decoded = base64.b64decode(match)
+            content = decoded.decode('utf-8', errors='ignore')
+            if '"sites"' in content:
+                return content
+        except:
+            continue
+    
+    return None
+
+def parse_sites(content):
+    """解析站点配置"""
+    content = content.replace('\r\n', '\n')
+    lines = content.split('\n')
+    clean_lines = [l for l in lines if not l.strip().startswith('//')]
+    content = '\n'.join(clean_lines)
+    
+    sites = []
+    current_site = ''
+    in_sites = False
+    
+    for line in content.split('\n'):
+        stripped = line.strip().rstrip(',')
+        
+        if '"sites":[' in line:
+            in_sites = True
+            after = line.split('[', 1)[1]
+            if '{' in after:
+                si = after.index('{')
+                rem = after[si:]
+                if '}' in rem:
+                    ei = rem.index('}') + 1
+                    obj = rem[:ei].rstrip(',')
+                    if obj: sites.append(obj)
+                    rest = rem[ei:].strip().rstrip(',')
+                    if rest and rest != ',' and rest.startswith('{'):
+                        sites.append(rest)
+            continue
+        
+        if in_sites:
+            if ']' in line:
+                before = line.split(']', 1)[0]
+                bstripped = before.strip().rstrip(',')
+                if bstripped.startswith('{'):
+                    sites.append(bsstripped)
+                in_sites = False
+                continue
+            
+            if stripped.startswith('{') and stripped.endswith('}'):
+                sites.append(stripped)
+            elif stripped.startswith('{'):
+                current_site = stripped.rstrip(',')
+            elif current_site:
+                current_site = current_site.rstrip(',') + ' ' + stripped.rstrip(',')
+                if '}' in current_site:
+                    sites.append(current_site)
+                    current_site = ''
+    
+    parsed = []
+    for s in sites:
+        try:
+            parsed.append(json.loads(s))
+        except:
+            pass
+    
+    return parsed
+
+def find_site(sites, keyword):
+    """查找站点"""
+    return [s for s in sites if keyword in s.get('name', '') or keyword in s.get('key', '')]
+
+def display_sites(sites, show_all=True):
+    """显示站点列表"""
+    if not sites:
+        print("未找到匹配的站点")
+        return
+    
+    for i, site in enumerate(sites):
+        name = site.get('name', '?')
+        key = site.get('key', '')
+        api = site.get('api', '')
+        sq = site.get('searchable', 0)
+        qs = site.get('quickSearch', 0)
+        ss = "快+普" if (sq and qs) else ("普" if sq else "否")
+        
+        if show_all or i < 10:
+            print(f"  [{i+1}] {name}")
+            print(f"      Key: {key}")
+            print(f"      API: {api}")
+            print(f"      搜索: {ss}")
+            
+            ext = site.get('ext', '')
+            if isinstance(ext, dict):
+                for k, v in ext.items():
+                    if k in ['siteUrl', 'Cloud-drive', 'json']:
+                        print(f"      {k}: {v}")
+            elif isinstance(ext, str) and len(ext) < 100:
+                print(f"      ext: {ext}")
+            
+            print()
+
+def main():
+    parser = argparse.ArgumentParser(description='饭太硬 TV 数据抓取工具')
+    parser.add_argument('--json', action='store_true', help='输出 JSON 格式')
+    parser.add_argument('--site', type=str, help='指定站点名称关键字')
+    parser.add_argument('--wanou', action='store_true', help='只显示玩偶哥哥')
+    parser.add_argument('--output', type=str, help='输出文件路径')
+    args = parser.parse_args()
+    
+    print("=" * 70)
+    print("  饭太硬 TV 数据抓取工具")
+    print("=" * 70)
+    
+    # 下载
+    print("\n[1/3] 正在下载配置...")
+    try:
+        filepath = download_config()
+        print(f"    下载成功: {filepath}")
+    except Exception as e:
+        print(f"    下载失败: {e}")
+        sys.exit(1)
+    
+    # 解码
+    print("[2/3] 正在解码配置...")
+    content = decode_config(filepath)
+    if not content:
+        print("    解码失败")
+        sys.exit(1)
+    print(f"    解码成功 ({len(content)} 字符)")
+    
+    # 解析
+    print("[3/3] 正在解析站点...")
+    sites = parse_sites(content)
+    print(f"    解析成功: {len(sites)} 个站点")
+    
+    # 输出
+    if args.wanou:
+        wanou_sites = find_site(sites, '玩偶')
+        if wanou_sites:
+            print("\n" + "=" * 70)
+            print("  玩偶哥哥 详细信息")
+            print("=" * 70)
+            print(json.dumps(wanou_sites[0], ensure_ascii=False, indent=2))
+    elif args.site:
+        matched = find_site(sites, args.site)
+        if matched:
+            print(f"\n找到 {len(matched)} 个匹配站点:")
+            display_sites(matched, show_all=True)
+        else:
+            print(f"未找到包含 '{args.site}' 的站点")
+    elif args.json:
+        output = {
+            'total': len(sites),
+            'sites': sites
+        }
+        if args.output:
+            with open(args.output, 'w', encoding='utf-8') as f:
+                json.dump(output, f, ensure_ascii=False, indent=2)
+            print(f"\nJSON 已保存到: {args.output}")
+        else:
+            print(json.dumps(output, ensure_ascii=False, indent=2))
+    else:
+        print(f"\n共 {len(sites)} 个站点:")
+        display_sites(sites, show_all=True)
+    
+    print("=" * 70)
+    print("  完成！")
+    print("=" * 70)
+
+if __name__ == '__main__':
+    main()
+
+
+================================================================================
+附录：数据文件位置
+================================================================================
+
+配置文件:
+  /tmp/tv_data.bin          - 原始下载数据
+  /tmp/tv_config.json       - 解码后的 JSON 配置
+  /tmp/sites_detail.json    - 解析后的站点详情
+
+Spider 插件:
+  /tmp/spider.jar           - Spider JAR 文件
+  /tmp/classes.dex          - 提取的 DEX 文件
+  /tmp/assets/              - 解压的 assets 目录
+
+脚本文件:
+  /workspace/tv_scrape.py   - 完整可运行脚本
+
+文档文件:
+  /workspace/.monkeycode/docs/饭太硬TV数据抓取方案.md
+  /workspace/.monkeycode/docs/饭太硬TV数据抓取方案.txt
+  /workspace/.monkeycode/docs/饭太硬TV站点深度分析.md
+  /workspace/.monkeycode/docs/饭太硬TV站点深度分析.txt
+
+================================================================================
+                          文档生成时间: 2026-07-06
+                          数据来源: http://www.饭太硬.net/tv
+================================================================================
