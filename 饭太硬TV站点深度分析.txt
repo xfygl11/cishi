@@ -1,0 +1,329 @@
+================================================================================
+                    饭太硬 TV 站点深度分析报告
+================================================================================
+
+一、数据获取方式
+--------------------------------------------------------------------------------
+
+1.1 数据源
+  URL:     http://www.饭太硬.net/tv
+  格式:    Base64 编码 + zlib 压缩的 JSON 数据，外层包裹在 JPEG 图片中
+  获取:    curl 下载后 Python 解码
+
+1.2 Spider 插件
+  URL:     https://zl.wpscdn.cn/2026/07/04/space_img/dedbf9ed-e86e-4603-b194-5bd20df8eb4e.jpg
+  格式:    Android DEX 文件 (JAR 包)
+  内容:    TVBox 爬虫插件，包含 44+ 个 Guard 类
+
+
+二、站点分类统计
+--------------------------------------------------------------------------------
+
+2.1 按内容类型分类
+
+  分类          数量   占比
+  -----------   ----   ----
+  影视点播       20    41.7%
+  动漫            3     6.3%
+  直播/体育       7    14.6%
+  网盘/搜索       9    18.8%
+  教育/其他       9    18.8%
+  ------------  ----   ----
+  总计           48   100.0%
+
+2.2 按 API 类型分组
+
+  【csp_BiliGuard】(7 个站点) - 基于哔哩哔哩
+    - 明星MV, 哔哔合集, 哔哔演唱会, 少儿教育, 小学课堂, 初中课堂, 高中课堂
+
+  【csp_AppSxGuard】(4 个站点) - 多线路影视
+    - 茉莉多线, 播客多线, 剧圈多线, 咕咕动漫
+
+  【csp_T4Guard】(2 个站点) - T4 架构
+    - 光影不卡, 奶酪秒播
+
+  【drpy2.min.js】(3 个站点) - JavaScript 动态爬虫
+    - 斗鱼直播, 虎牙直播, 儿童启蒙
+
+  【单站点 API】(32 个) - 每个 API 对应一个站点
+    - 玩偶哥哥, 厂长, 瓜子, 比特, 糯米, 文采, 热播, 荐片, 奥特, 新6V
+    - 巴士动漫, 日本动漫, 看球, 多多, 吃瓜, 一直播, 有声小说, 急救教学
+    - 抠搜, 优汐, 盘她, 盘他, 聚剧剧, 聚盘搜, 原创, 立播, 瓜子, 比特
+    - 糯米, 文采, 热播, 荐片, 奥特, 新6V, 等等...
+
+
+三、重点站点详解
+--------------------------------------------------------------------------------
+
+3.1 玩偶哥哥 (csp_WoGGGuard)
+
+  名称:    玩偶哥哥4K弹幕
+  Key:     玩偶
+  API:     csp_WoGGGuard
+  搜索:    快速搜索 + 普通搜索
+  超时:    30 秒 (较长，数据源响应慢)
+  云盘:    tvfan/Cloud-drive.txt
+
+  特点:
+    - 支持 4K 弹幕
+    - 需要云盘配置
+    - 超时时间长说明数据源较慢
+
+3.2 厂长影视 (csp_NewCzGuard)
+
+  名称:    厂长不卡
+  Key:     厂长
+  API:     csp_NewCzGuard
+  搜索:    快速搜索 + 普通搜索
+  换源:    支持 (changeable: 1)
+  播放器:  类型 2
+
+  特点:
+    - 不卡播放
+    - 支持换源
+
+3.3 立播 (csp_LibvioGuard)
+
+  名称:    立播不卡
+  Key:     立播
+  API:     csp_LibvioGuard
+  搜索:    快速搜索 + 普通搜索
+  换源:    支持
+  地址:    https://www.libvio.pw/
+  云盘:    tvfan/Cloud-drive.txt
+
+3.4 新6V (csp_SixVGuard)
+
+  名称:    新6V磁力
+  Key:     新6V
+  API:     csp_SixVGuard
+  搜索:    快速搜索 + 普通搜索
+  地址:    https://www.xb6v.com/
+
+  特点: 磁力链接资源
+
+
+四、Spider JAR 文件分析
+--------------------------------------------------------------------------------
+
+4.1 文件结构
+
+  spider.jar/
+  ├── classes.dex              (36,724 bytes) - Android DEX 文件
+  ├── META-INF/MANIFEST.MF     (73 bytes)      - JAR 清单
+  └── assets/
+      ├── ftyguard_v7.so       (81,520 bytes)  - ARM32 原生库
+      ├── ftyguard_v8.so       (102,440 bytes) - ARM64 原生库
+      └── ftyshinidie.guard    (960,181 bytes) - 加密/混淆的 DEX 文件
+
+4.2 包含的 Guard 类 (44 个)
+
+  【基础类】
+    BaseSpiderGuard
+
+  【影视类】
+    T4Guard, JPJGuard, NewCzGuard, YCyzGuard, LibvioGuard
+    AppgzGuard, BttwooGuard, NmyswvGuard, JpysGuard, AueteGuard
+    SixVGuard, AppTTGuard, AppSxGuard, AppSKGuard, AppNoxGuard
+
+  【动漫类】
+    Dm84Guard, Anime1Guard
+
+  【搜索/网盘类】
+    WoGGGuard, KkSsGuard, UuSsGuard, YpanSoGuard, BpanSoGuard
+    SeedhubGuard, S_zpsGuard, MyDriveGuard, PushGuard, WebDAVGuard
+
+  【直播/体育类】
+    KanqiuGuard, DoubaoGuard, LiveGzGuard, AllliveGuard
+
+  【教育/其他类】
+    BiliGuard, MusicGuard, YGPGuard, FirstAidGuard, Tingshu275Guard
+    YoutubeGuard
+
+  【特殊类】
+    KaFeiGuard (咖啡), Sir88Guard (Sir搜), LocalGuard (本地)
+    AppYsV2Guard (APP接口V2)
+
+4.3 混淆结构
+
+  存在 mergeguard 混淆包，包含 20+ 个混淆类:
+    OoOoO0O0o0oOoO0O
+    oOoOoOoOoOoOoO0o
+    等等...
+
+
+五、搜索能力统计
+--------------------------------------------------------------------------------
+
+  搜索类型        数量   示例
+  -------------  ----   ----------------------------------------
+  快速+普通       28    玩偶、厂长、瓜子、比特、糯米、文采等
+  仅普通          10    MDrive、ZPan、虎牙、斗鱼、抠搜等
+  不可搜索        10    看球、听歌、教育、急救等
+
+
+六、云盘配置
+--------------------------------------------------------------------------------
+
+  以下站点需要云盘配置 (tvfan/Cloud-drive.txt):
+
+    1.  MDrive         (我的云盘)
+    2.  玩偶哥哥       (4K弹幕)
+    3.  立播           (不卡)
+    4.  抠搜           (搜搜)
+    5.  优汐           (搜搜)
+    6.  盘她           (夸父)
+    7.  盘他           (嘟嘟)
+    8.  push_agent     (手机推送)
+
+
+七、外部依赖
+--------------------------------------------------------------------------------
+
+7.1 JSON 配置 URL (网易云存储)
+
+  明星 MV:     https://nos.netease.com/ysf/5af5fbe12a88b7c45aa1c21e6551826c.txt
+  哔哔合集:    https://nos.netease.com/ysf/0075389dca9afadd4614e9713765ff17.txt
+  哔哔演唱会:  https://nos.netease.com/ysf/6496356286589c68f52c2f99c0c674c7.txt
+  少儿教育:    https://nos.netease.com/ysf/89370c8ddf36b5e1beb4d71adb921bda.txt
+  小学课堂:    https://nos.netease.com/ysf/d7a21cf34ede56f5c686ecfba5fc7e3f.txt
+  初中课堂:    https://nos.netease.com/ysf/8f55d520f8d70056695740ef151744a7.txt
+  高中课堂:    https://nos.netease.com/ysf/c66a4b5356141c49fd45ec51568017b4.txt
+
+7.2 JavaScript 爬虫 URL
+
+  虎牙直播:    https://gh-proxy.com/.../EXT/.../虎牙.js
+  斗鱼直播:    https://git.yylx.win/.../EXT/.../斗鱼直播.js
+  儿童启蒙:    https://git.yylx.win/.../EXT/.../兔小贝.js
+
+7.3 站点地址
+
+  立播:    https://www.libvio.pw/
+  新6V:    https://www.xb6v.com/
+  聚盘搜:  http://107.173.211.148/
+
+
+八、IPTV 直播源
+--------------------------------------------------------------------------------
+
+  [1] develop202
+      https://gh.927223.xyz/.../develop202/migu_video/.../interface.txt
+
+  [2] Kimentanm
+      https://gh.927223.xyz/.../Kimentanm/aptv/.../iptv.m3u
+
+  [3] 范明明 (需开启V6网络)
+      https://nos.netease.com/ysf/3d75a78a0fc7ede372c03598d6d10367.m3u
+
+  [4] 世界杯
+      http://82.156.243.185:33389/fwc.m3u
+
+  [5] 虎牙一起看
+      https://sub.ottiptv.cc/huyayqk.m3u
+
+  [6] 斗鱼一起看
+      https://sub.ottiptv.cc/douyuyqk.m3u
+
+  [7] B站直播
+      https://sub.ottiptv.cc/bililive.m3u
+
+  [8] YY轮播
+      https://sub.ottiptv.cc/yylunbo.m3u
+
+
+九、技术总结
+--------------------------------------------------------------------------------
+
+9.1 数据流向
+
+  饭太硬网站 (Base64+zlib+JPEG)
+      |
+      v  下载
+  原始二进制数据
+      |
+      v  Base64 解码
+  压缩 JSON
+      |
+      v  zlib 解压缩
+  明文 JSON 配置
+      |
+      v  解析
+  站点列表 + Spider JAR URL
+      |
+      v  下载 JAR
+  Android DEX 文件
+      |
+      v  反编译
+  44+ 个爬虫类
+
+9.2 关键技术点
+
+  1. IDN 域名处理: 中文域名需要特殊处理 (Python urllib 不支持，需用 curl)
+  2. 多层编码: Base64 + zlib + JPEG 包裹
+  3. Android DEX: Spider 插件是 Android 格式的 DEX 文件
+  4. 原生库保护: 使用 ARM32/ARM64 SO 文件进行加密保护
+  5. 代码混淆: mergeguard 包使用混淆类名
+
+9.3 限制说明
+
+  - Spider JAR 中的核心逻辑被加密/混淆，无法直接读取
+  - 需要 TVBox 或兼容应用才能运行这些爬虫
+  - 部分 ext 字段包含加密参数，需要对应插件解密
+
+
+十、附录：完整站点列表
+--------------------------------------------------------------------------------
+
+  [ 1] 去【太太太硬了】领取嘟嘟盘免费容量    | 点我切源  | csp_DouDouGuard  | 否
+  [ 2] 我的云盘我配置                       | MDrive    | csp_MyDriveGuard | 普
+  [ 3] 玩偶哥哥4K弹幕                       | 玩偶      | csp_WoGGGuard    | 快+普
+  [ 4] 叨观荐影预告片                       | YGP       | csp_YGPGuard     | 否
+  [ 5] 易听音乐带歌词                       | MTV1      | csp_MusicGuard   | 否
+  [ 6] 聚剧剧四盘                           | seed      | csp_SeedhubGuard | 快+普
+  [ 7] 聚盘搜四盘                           | ZPan      | csp_S_zpsGuard   | 普
+  [ 8] 光影不卡                             | 光影      | csp_T4Guard      | 快+普
+  [ 9] 原创不卡                             | 原创      | csp_YCyzGuard    | 快+普
+  [10] 厂长不卡                             | 厂长      | csp_NewCzGuard   | 快+普
+  [11] 立播不卡                             | 立播      | csp_LibvioGuard  | 快+普
+  [12] 瓜子不卡                             | 瓜子      | csp_AppgzGuard   | 快+普
+  [13] 比特不卡                             | 比特      | csp_BttwooGuard  | 快+普
+  [14] 糯米秒播                             | 糯米      | csp_NmyswvGuard  | 快+普
+  [15] 文采秒播                             | 文采      | csp_JpysGuard    | 快+普
+  [16] 奶酪秒播                             | 奶酪      | csp_T4Guard      | 快+普
+  [17] 热播多线                             | 热播      | csp_AppTTGuard   | 快+普
+  [18] 茉莉多线                             | 视界      | csp_AppSxGuard   | 快+普
+  [19] 播客多线                             | 播客      | csp_AppSxGuard   | 快+普
+  [20] 剧圈多线                             | 剧圈      | csp_AppSxGuard   | 快+普
+  [21] 荐片多线                             | 荐片      | csp_JPJGuard     | 快+普
+  [22] 奥特多线                             | 奥特      | csp_AueteGuard   | 快+普
+  [23] 新6V磁力                             | 新6V      | csp_SixVGuard    | 快+普
+  [24] 咕咕动漫                             | 咕咕      | csp_AppSxGuard   | 快+普
+  [25] 巴士动漫                             | Dm84      | csp_Dm84Guard    | 快+普
+  [26] 日本动漫                             | Anime1    | csp_Anime1Guard  | 快+普
+  [27] 八八看球                             | 看球      | csp_KanqiuGuard  | 否
+  [28] 多多看球                             | 多多      | csp_DoubaoGuard  | 否
+  [29] 吃瓜看球                             | 吃瓜      | csp_LiveGzGuard  | 否
+  [30] 一直播直播                           | alllive   | csp_AllliveGuard | 否
+  [31] 明星MV                               | MTV       | csp_BiliGuard    | 否
+  [32] 有声小说                             | 有声小说  | csp_Tingshu275Guard | 否
+  [33] 急救教学                             | Aid       | csp_FirstAidGuard | 否
+  [34] 虎牙直播                             | 虎牙js    | drpy2.min.js     | 普
+  [35] 斗鱼直播                             | 斗鱼js    | drpy2.min.js     | 普
+  [36] 抠抠搜搜                             | 抠搜      | csp_KkSsGuard    | 快+普
+  [37] 优汐搜搜                             | UC        | csp_UuSsGuard    | 快+普
+  [38] 盘她夸父                             | YpanSo    | csp_YpanSoGuard  | 快+普
+  [39] 盘他嘟嘟                             | BpanSo    | csp_BpanSoGuard  | 快+普
+  [40] 手机推送                             | push_agent | csp_PushGuard   | 否
+  [41] 哔哔合集弹幕                         | Bili      | csp_BiliGuard    | 普
+  [42] 哔哔演唱会弹幕                       | Biliych   | csp_BiliGuard    | 否
+  [43] 儿童启蒙                             | dr_兔小贝 | drpy2.min.js     | 否
+  [44] 少儿教育                             | 少儿教育  | csp_BiliGuard    | 否
+  [45] 小学课堂                             | 小学课堂  | csp_BiliGuard    | 否
+  [46] 初中课堂                             | 初中课堂  | csp_BiliGuard    | 否
+  [47] 高中课堂                             | 高中教育  | csp_BiliGuard    | 否
+  [48] 请勿信视频中任何广告                 | cc        | csp_XPathGuard   | 普
+
+================================================================================
+                          文档生成时间: 2026-07-06
+                          数据来源: http://www.饭太硬.net/tv
+================================================================================
