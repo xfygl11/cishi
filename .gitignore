@@ -1,0 +1,14 @@
+# Build outputs
+build/
+.gradle/
+*.apk.idsig
+*.jar
+*.dex
+*.class
+
+# Gradle
+.gradle/
+build/
+
+# Local config
+local.properties

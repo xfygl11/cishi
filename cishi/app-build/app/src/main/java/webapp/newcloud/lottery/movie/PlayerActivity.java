@@ -545,15 +545,7 @@ public class PlayerActivity extends Activity {
         totalTimeText.setText("00:00");
         renderEpisodes();
 
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                View active = episodesLayout.getChildAt(currentIdx);
-                if (active != null) {
-                    episodesScroll.smoothScrollTo(active.getLeft() - dp(40), 0);
-                }
-            }
-        }, 100);
+        handler.postDelayed(new EpisodesScroller(), 100);
     }
 
     private String resolvePlayUrl(String url, int parserIdx) {
@@ -611,7 +603,9 @@ public class PlayerActivity extends Activity {
         }
     }
 
-    private Runnable progressRunnable = new Runnable() {
+    private Runnable progressRunnable = new ProgressRunnable();
+
+    private class ProgressRunnable implements Runnable {
         @Override
         public void run() {
             try {
@@ -625,7 +619,7 @@ public class PlayerActivity extends Activity {
             } catch (Exception ignored) {}
             handler.postDelayed(this, 1000);
         }
-    };
+    }
 
     private void toggleControls() {
         controlVisible = !controlVisible;
@@ -646,15 +640,17 @@ public class PlayerActivity extends Activity {
     }
 
     private void autoHideControls() {
-        hideControlRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (isPlaying && controlVisible) {
-                    toggleControls();
-                }
-            }
-        };
+        hideControlRunnable = new HideControlRunnable();
         resetAutoHide();
+    }
+
+    private class HideControlRunnable implements Runnable {
+        @Override
+        public void run() {
+            if (isPlaying && controlVisible) {
+                toggleControls();
+            }
+        }
     }
 
     private void resetAutoHide() {
@@ -767,6 +763,16 @@ public class PlayerActivity extends Activity {
         Parser(String name, String base) {
             this.name = name;
             this.base = base;
+        }
+    }
+
+    private class EpisodesScroller implements Runnable {
+        @Override
+        public void run() {
+            View active = episodesLayout.getChildAt(currentIdx);
+            if (active != null) {
+                episodesScroll.smoothScrollTo(active.getLeft() - dp(40), 0);
+            }
         }
     }
 }
